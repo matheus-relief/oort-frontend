@@ -29,25 +29,25 @@ jobs:
       - name: Install Dependencies
         run: npm i
       
-      - name: Build Back-office
-        run: npx nx run back-office:build
+      # - name: Build Back-office
+      #   run: npx nx run back-office:build
       
-      - name: Build Front-office
-        run: npx nx run front-office:build
+      # - name: Build Front-office
+      #   run: npx nx run front-office:build
       
       - name: Archive build Back-office
         if: success()
         uses: actions/upload-artifact@v3
         with:
           name: back_office
-          path: dist/apps/back-office
+          path: apps/back-office
       
       - name: Archive build Front-office
         if: success()
         uses: actions/upload-artifact@v3
         with:
           name: front_office
-          path: dist/apps/front-office
+          path: apps/front-office
 
   deploy:
     runs-on: ubuntu-latest
