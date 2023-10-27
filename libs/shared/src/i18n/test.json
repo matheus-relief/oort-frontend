@@ -512,6 +512,8 @@
 			"dashboard": {
 				"editFilter": "******",
 				"empty": "******",
+				"enterEditMode": "******",
+				"enterPreviewMode": "******",
 				"filter": {
 					"empty": "******",
 					"filterPosition": {
@@ -2125,6 +2127,7 @@
 			},
 			"display": {
 				"border": "******",
+				"header": "******",
 				"searchable": "******",
 				"sortable": "******",
 				"title": "******"

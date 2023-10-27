@@ -512,6 +512,8 @@
 			"dashboard": {
 				"editFilter": "Edit filter",
 				"empty": "No content available. Wait for your administrator to build some.",
+				"enterEditMode": "Enter edit mode",
+				"enterPreviewMode": "Enter preview mode",
 				"filter": {
 					"empty": "No filters have been defined by the administrators",
 					"filterPosition": {
@@ -2125,6 +2127,7 @@
 			},
 			"display": {
 				"border": "Show widget border",
+				"header": "Show widget header",
 				"searchable": "Allow search",
 				"sortable": "Allow sorting",
 				"title": "Widget display"
