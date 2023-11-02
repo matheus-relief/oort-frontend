@@ -140,6 +140,8 @@
           <ui-graphql-select
             [query]="recordsQuery"
             [formControl]="contextId"
+            [filterable]="true"
+            (searchChange)="onSearchChange($event)"
             path="records"
             valueField="id"
             textField="data.{{ dashboard.page.context.displayField }}"
@@ -177,7 +179,6 @@
     [loading]="loading"
     [widgets]="widgets"
     [canUpdate]="(canUpdate && editionActive) || false"
-    (move)="onMove($event)"
     (edit)="onEditTile($event)"
     (delete)="onDeleteTile($event)"
     (style)="onStyleTile($event)"
