@@ -47,6 +47,7 @@ import { Observable, firstValueFrom } from 'rxjs';
 import { FormControl } from '@angular/forms';
 import { cloneDeep, isEqual } from 'lodash';
 import { Dialog } from '@angular/cdk/dialog';
+import { DashboardExportActionComponent } from './components/dashboard-export-action/dashboard-export-action.component';
 import { SnackbarService, UILayoutService } from '@oort-front/ui';
 import localForage from 'localforage';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -54,6 +55,9 @@ import { ContextService, CustomWidgetStyleComponent } from '@oort-front/shared';
 import { DOCUMENT } from '@angular/common';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { GridsterConfig } from 'angular-gridster2';
+import { PDFExportComponent } from '@progress/kendo-angular-pdf-export';
+import { drawDOM, exportPDF, exportImage } from '@progress/kendo-drawing';
+import { saveAs } from '@progress/kendo-file-saver';
 
 /** Default number of records fetched per page */
 const ITEMS_PER_PAGE = 10;
@@ -76,6 +80,10 @@ export class DashboardComponent
   /** Widget grid reference */
   @ViewChild(WidgetGridComponent)
   widgetGridComponent!: WidgetGridComponent;
+  /** PDF Export Component View Child */
+  @ViewChild(PDFExportComponent) pdfExport!: PDFExportComponent;
+  /** PDF Export Div View Child */
+  @ViewChild('pdfExport') exporter!: ElementRef;
   /** Is dashboard in fullscreen mode */
   public isFullScreen = false;
   /** Dashboard id */
@@ -119,6 +127,8 @@ export class DashboardComponent
   public editionActive = true;
   /** Additional grid configuration */
   public gridOptions: GridsterConfig = {};
+  /** PDF export scale */
+  public exportScale = 0.45;
 
   /** @returns type of context element */
   get contextType() {
@@ -396,6 +406,36 @@ export class DashboardComponent
     }
     // else return settings as given
     return { settings };
+  }
+
+  /**
+   * Calculates the scale for the dashboard should shrink to fit the a4 pdf.
+   *
+   * @param paperSize
+   * @returns {number} The calculated scale.
+   */
+  private exportScaleCalc(paperSize: string): number {
+    if (paperSize == 'a4') {
+      const rect = this.exporter.nativeElement.getBoundingClientRect();
+      const currentWidth = rect.width;
+      let currentHeight = rect.height;
+      console.log('Width =' + currentWidth);
+      console.log('Height =' + currentWidth);
+
+      const optimalWidth = 1238.4;
+      const optimalHeight = 2595;
+      const optimalSize = optimalWidth * optimalHeight;
+      console.log(optimalSize);
+      if (currentHeight > 1.5 * optimalHeight) {
+        currentHeight = (optimalHeight / currentHeight) * optimalHeight;
+      }
+      const currentSize = currentWidth * currentHeight;
+      const scaleFactor = (optimalSize / currentSize) * 0.45;
+      console.log(scaleFactor);
+      return scaleFactor;
+    } else {
+      return this.exportScale;
+    }
   }
 
   /**
@@ -800,6 +840,172 @@ export class DashboardComponent
     );
 
     this.dashboardService.saveDashboardButtons(this.buttonActions);
+  }
+
+  /**
+   * This method generates a PDF with the user input provided parameters.
+   *
+   * @param includeHeaderFooter Whether to include headers and footers in the PDF.
+   * @param orientation The orientation of the PDF.
+   * @param pdfSize The size of the PDF to be generated.
+   * @param pdfScale The scale of the PDF content.
+   * @param pdfMargin The margins inserted into the PDF content.
+   * @returns {Promise<string>} A promise that resolves to a string representing the PDF data.
+   */
+  public async pdfDrawer(
+    includeHeaderFooter: boolean,
+    orientation: string,
+    pdfSize: string,
+    pdfScale: number,
+    pdfMargin: string
+  ): Promise<string> {
+    const marginCalc =
+      pdfMargin === 'none'
+        ? { top: 0, left: 0, bottom: 0 }
+        : pdfMargin === 'minimum'
+        ? { top: 5, left: 10, bottom: 10 }
+        : { top: 5, left: 20, bottom: 10 };
+
+    if (includeHeaderFooter) {
+      this.addHeaderAndFooter();
+    }
+
+    const drawing = await drawDOM(this.exporter.nativeElement, {
+      paperSize: pdfSize,
+      margin: marginCalc,
+      landscape: orientation === 'landscape' ? true : false,
+      scale: this.exportScaleCalc(pdfSize) * (pdfScale / 100),
+    });
+    const pdfData = await exportPDF(drawing);
+    if (includeHeaderFooter) {
+      this.removeHeaderAndFooter();
+    }
+
+    return pdfData;
+  }
+
+  /**
+   * Saves the dashboard as a PDF file.
+   */
+  public async pdfExporter(): Promise<void> {
+    const data = {
+      exportType: 'pdf',
+    };
+
+    // Open the DashboardExportActionComponent dialog
+    const dialogRef = this.dialog.open(DashboardExportActionComponent, {
+      data: { data },
+    });
+
+    // Handle the dialog result
+    dialogRef.closed.subscribe(async (result) => {
+      console.log(`Dialog result: ${JSON.stringify(result)}`);
+      const resultValue = result as {
+        includeHeaderFooter: boolean;
+        orientation: string;
+        paperSize: string;
+        scale: number;
+        margin: string;
+      };
+      const pngData = await this.pdfDrawer(
+        resultValue.includeHeaderFooter,
+        resultValue.orientation,
+        resultValue.paperSize,
+        resultValue.scale,
+        resultValue.margin
+      );
+      saveAs(pngData, `${this.dashboard?.name}.pdf`);
+    });
+  }
+
+  /**
+   * Adds header and footer to the top and bottom of a
+   * PDF and Image export.
+   */
+  private addHeaderAndFooter(): void {
+    // Create header and footer elements
+    const header = this.document.createElement('div');
+    const footer = this.document.createElement('div');
+
+    // Add date and time to header
+    const dateTime = new Date();
+    const dateTimeText =
+      dateTime.toLocaleDateString() + ' ' + dateTime.toLocaleTimeString();
+    const pageTitle = this.dashboard?.name;
+    header.innerHTML = `<span style="float: left;">${dateTimeText}</span><span style="display: block; text-align: center;">${pageTitle}</span>`;
+
+    // Add URL to footer
+    const url = window.location.href;
+    footer.innerHTML = `<span style="text-align: center;">${url}</span>`;
+
+    // Append header and footer to the dashboard
+    this.exporter.nativeElement.prepend(header);
+    this.exporter.nativeElement.append(footer);
+  }
+
+  /**
+   * Removes header and footer from pdf and image export.
+   */
+  private removeHeaderAndFooter(): void {
+    const header = this.exporter.nativeElement.firstChild;
+    const footer = this.exporter.nativeElement.lastChild;
+    this.exporter.nativeElement.removeChild(header);
+    this.exporter.nativeElement.removeChild(footer);
+  }
+
+  /**
+   * This function draws a PNG image from the current state of the dashboard.
+   *
+   * @param includeHeaderFooter Whether to include a header and footer in the image.
+   * @returns {Promise<string>} A promise that resolves to a string representing the PNG data.
+   */
+  public async pngDrawer(includeHeaderFooter: boolean): Promise<string> {
+    if (includeHeaderFooter) {
+      this.addHeaderAndFooter();
+    }
+
+    const background = this.exporter.nativeElement.style.color;
+    this.exporter.nativeElement.style.background = '#fff';
+    const drawing = await drawDOM(this.exporter.nativeElement, {
+      margin: { top: 10, left: 5, right: 5, bottom: 10 },
+    });
+    this.exporter.nativeElement.style.background = background;
+    const pngData = await exportImage(drawing);
+    if (includeHeaderFooter) {
+      this.removeHeaderAndFooter();
+    }
+
+    return pngData;
+  }
+
+  /**
+   * Exports the dashboard to PNG
+   *
+   */
+  public async pngExporter(): Promise<void> {
+    let format: 'png' | 'jpeg';
+    let includeHeaderFooter: boolean;
+    const data = {
+      exportType: 'png',
+    };
+
+    // Open the DashboardExportActionComponent dialog
+    const dialogRef = this.dialog.open(DashboardExportActionComponent, {
+      data: { data },
+    });
+
+    // Handle the dialog result
+    dialogRef.closed.subscribe(async (result) => {
+      console.log(`Dialog result: ${JSON.stringify(result)}`);
+      const resultValue = result as {
+        format: 'png' | 'jpeg';
+        includeHeaderFooter: boolean;
+      };
+      format = resultValue.format;
+      includeHeaderFooter = resultValue.includeHeaderFooter;
+      const pngData = await this.pngDrawer(includeHeaderFooter);
+      saveAs(pngData, `${this.dashboard?.name}.${format}`);
+    });
   }
 
   /**
