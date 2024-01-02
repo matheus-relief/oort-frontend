@@ -65,6 +65,8 @@ import { Platform } from '@angular/cdk/platform';
 import { ContextService } from '../../../services/context/context.service';
 import { DOCUMENT } from '@angular/common';
 import { ShadowDomService } from '@oort-front/ui';
+import { MapStatusService } from '../../../services/map/map-status.service';
+import html2canvas from 'html2canvas';
 
 /** Component for the map widget */
 @Component({
@@ -178,6 +180,7 @@ export class MapComponent
    * @param arcgisService Shared arcgis service
    * @param mapLayersService MapLayersService
    * @param mapPopupService The map popup handler service
+   * @param mapStatusService
    * @param contextService The context service
    * @param platform Platform
    * @param injector Injector containing all needed providers
@@ -192,6 +195,7 @@ export class MapComponent
     private arcgisService: ArcgisService,
     public mapLayersService: MapLayersService,
     public mapPopupService: MapPopupService,
+    private mapStatusService: MapStatusService,
     private contextService: ContextService,
     private platform: Platform,
     public injector: Injector,
@@ -225,6 +229,10 @@ export class MapComponent
       });
       //}
     }, 1000);
+    // When map is loaded, set mapExists status to true.
+    this.map.whenReady(async () => {
+      this.mapStatusService.updateMapStatus(true);
+    });
 
     /**
      * Keep checking until filters are applied in order to apply next one
@@ -249,6 +257,14 @@ export class MapComponent
       };
       return new Promise(checkAgain);
     };
+
+    this.mapStatusService.isExporting$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((isExporting) => {
+        if (isExporting) {
+          this.screenshotMap();
+        }
+      });
 
     // Listen to dashboard filters changes
     this.contextService.filter$
@@ -796,6 +812,31 @@ export class MapComponent
     // Reset related properties
     this.resetLayers();
   }
+
+  /**
+   * Attempt at Screenshotting map using html 2 canvas.
+   */
+  async screenshotMap() {
+    // Wait for the map to be fully loaded
+    await this.map.whenReady(async () => {
+      console.log('Map is ready');
+      // Then take the screenshot
+      const mapElement = document.getElementById(this.mapId);
+      if (mapElement) {
+        const canvas = await html2canvas(mapElement);
+        const img = document.createElement('img');
+        img.src = canvas.toDataURL();
+        img.style.zIndex = '9999';
+        // Replace the map with the screenshot
+        mapElement.parentNode?.replaceChild(img, mapElement);
+        // After 3 seconds, replace the screenshot with the map
+        setTimeout(() => {
+          img.parentNode?.replaceChild(mapElement, img);
+        }, 3000);
+      }
+    });
+  }
+
   //   /**
   //  * Function used to apply options
   //  *

@@ -51,7 +51,11 @@ import { DashboardExportActionComponent } from './components/dashboard-export-ac
 import { SnackbarService, UILayoutService } from '@oort-front/ui';
 import localForage from 'localforage';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
-import { ContextService, CustomWidgetStyleComponent } from '@oort-front/shared';
+import {
+  ContextService,
+  MapStatusService,
+  CustomWidgetStyleComponent,
+} from '@oort-front/shared';
 import { DOCUMENT } from '@angular/common';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { GridsterConfig } from 'angular-gridster2';
@@ -129,6 +133,7 @@ export class DashboardComponent
   public gridOptions: GridsterConfig = {};
   /** PDF export scale */
   public exportScale = 0.45;
+  private mapExists = false;
 
   /** @returns type of context element */
   get contextType() {
@@ -162,6 +167,7 @@ export class DashboardComponent
    * @param refDataService Shared reference data service
    * @param renderer Angular renderer
    * @param elementRef Angular element ref
+   * @param mapStatusService
    * @param layoutService Shared layout service
    * @param document Document
    * @param clipboard Angular clipboard service
@@ -181,6 +187,7 @@ export class DashboardComponent
     private refDataService: ReferenceDataService,
     private renderer: Renderer2,
     private elementRef: ElementRef,
+    private mapStatusService: MapStatusService,
     private layoutService: UILayoutService,
     @Inject(DOCUMENT) private document: Document,
     private clipboard: Clipboard
@@ -286,6 +293,15 @@ export class DashboardComponent
             // if there is no id, we are not on a contextual dashboard, we simply load the dashboard
             this.loadDashboard(id).then(() => (this.loading = false));
           }
+          // Returns true if a map exists in the dashboard
+          this.mapStatusService.mapStatus$
+            .pipe(takeUntil(this.destroy$))
+            .subscribe((status: any) => {
+              console.log('Map status:', status);
+              if (status) {
+                this.mapExists = true;
+              }
+            });
         }
       });
   }
@@ -907,15 +923,20 @@ export class DashboardComponent
         scale: number;
         margin: string;
       };
-      const pngData = await this.pdfDrawer(
+      // Sends export = true to map component when kendo export starts
+      this.mapStatusService.updateExportingStatus(true);
+
+      const pdfData = await this.pdfDrawer(
         resultValue.includeHeaderFooter,
         resultValue.orientation,
         resultValue.paperSize,
         resultValue.scale,
         resultValue.margin
       );
-      saveAs(pngData, `${this.dashboard?.name}.pdf`);
+      saveAs(pdfData, `${this.dashboard?.name}.pdf`);
     });
+
+    this.mapStatusService.updateExportingStatus(false);
   }
 
   /**
