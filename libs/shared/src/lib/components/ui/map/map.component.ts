@@ -11,6 +11,7 @@ import {
   Injector,
   ElementRef,
 } from '@angular/core';
+import { take } from 'rxjs/operators';
 import { UnsubscribeComponent } from '../../utils/unsubscribe/unsubscribe.component';
 // Leaflet plugins
 import 'leaflet';
@@ -55,6 +56,7 @@ import {
 } from 'lodash';
 import {
   BehaviorSubject,
+  Subscription,
   concatMap,
   debounceTime,
   filter,
@@ -66,7 +68,6 @@ import { ContextService } from '../../../services/context/context.service';
 import { DOCUMENT } from '@angular/common';
 import { ShadowDomService } from '@oort-front/ui';
 import { MapStatusService } from '../../../services/map/map-status.service';
-import html2canvas from 'html2canvas';
 
 /** Component for the map widget */
 @Component({
@@ -169,6 +170,8 @@ export class MapComponent
   private overlaysTree: L.Control.Layers.TreeObject[][] = [];
   /** Refreshing layers. When true, should prevent layers to be duplicated  */
   private refreshingLayers = new BehaviorSubject<boolean>(true);
+  /** Revert Map Exporting subscription */
+  private revertMapSubscription?: Subscription;
 
   /**
    * Map widget component
@@ -262,7 +265,41 @@ export class MapComponent
       .pipe(takeUntil(this.destroy$))
       .subscribe((isExporting) => {
         if (isExporting) {
-          this.screenshotMap();
+          // Save the current basemap and webmap
+          const originalBasemap = this.basemap;
+          const originalWebMap = this.arcGisWebMap;
+
+          // Replace the current map layer with the WHO Polygon Raster Basemap
+          this.basemap = L.tileLayer(
+            'https://tiles.arcgis.com/tiles/5T5nSi527N4F7luB/arcgis/rest/services/WHO_Polygon_Raster_Basemap/MapServer/tile/{z}/{y}/{x}',
+            {
+              attribution:
+                '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
+            }
+          ).addTo(this.map);
+
+          // Replace the current webmap with an empty layer group (or any other placeholder)
+          this.arcGisWebMap = L.layerGroup().addTo(this.map);
+
+          // If there's an existing subscription to revert the map, unsubscribe first
+          if (this.revertMapSubscription) {
+            this.revertMapSubscription?.unsubscribe();
+          }
+
+          // After the export is done, restore the original basemap and webmap
+          this.revertMapSubscription = this.mapStatusService.isExporting$
+            .pipe(
+              filter((isExporting) => !isExporting),
+              take(1)
+            )
+            .subscribe(() => {
+              this.map.removeLayer(this.basemap);
+              this.map.removeLayer(this.arcGisWebMap);
+              this.basemap = originalBasemap.addTo(this.map); // Add the basemap back first
+              this.arcGisWebMap = originalWebMap.addTo(this.map); // Then add the webmap on top
+              // Unsubscribe to clean up
+              this.revertMapSubscription?.unsubscribe();
+            });
         }
       });
 
@@ -811,30 +848,6 @@ export class MapComponent
     }
     // Reset related properties
     this.resetLayers();
-  }
-
-  /**
-   * Attempt at Screenshotting map using html 2 canvas.
-   */
-  async screenshotMap() {
-    // Wait for the map to be fully loaded
-    await this.map.whenReady(async () => {
-      console.log('Map is ready');
-      // Then take the screenshot
-      const mapElement = document.getElementById(this.mapId);
-      if (mapElement) {
-        const canvas = await html2canvas(mapElement);
-        const img = document.createElement('img');
-        img.src = canvas.toDataURL();
-        img.style.zIndex = '9999';
-        // Replace the map with the screenshot
-        mapElement.parentNode?.replaceChild(img, mapElement);
-        // After 3 seconds, replace the screenshot with the map
-        setTimeout(() => {
-          img.parentNode?.replaceChild(mapElement, img);
-        }, 3000);
-      }
-    });
   }
 
   //   /**
