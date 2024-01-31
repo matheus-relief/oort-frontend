@@ -133,7 +133,9 @@ export class DashboardComponent
   public gridOptions: GridsterConfig = {};
   /** Map Loaded subscription */
   private mapReadyForExportSubscription?: Subscription;
+  /** Map Exists State */
   private mapExists = false;
+  /** Map Status Subscription */
   private mapStatusSubscription?: Subscription;
 
   /** @returns type of context element */
@@ -197,6 +199,7 @@ export class DashboardComponent
   }
 
   ngOnInit(): void {
+    this.mapExists = false;
     this.contextId.valueChanges
       .pipe(debounceTime(500), takeUntil(this.destroy$))
       .subscribe((value) => {
@@ -294,14 +297,6 @@ export class DashboardComponent
             // if there is no id, we are not on a contextual dashboard, we simply load the dashboard
             this.loadDashboard(id).then(() => (this.loading = false));
           }
-          // Returns true if a map exists in the dashboard
-          this.mapStatusSubscription = this.mapStatusService.mapStatus$
-            .pipe(takeUntil(this.destroy$))
-            .subscribe((status: any) => {
-              if (status) {
-                this.mapExists = true;
-              }
-            });
         }
       });
   }
@@ -318,11 +313,25 @@ export class DashboardComponent
       return;
     }
 
+    this.mapStatusService.updateMapStatus(false);
+    this.mapExists = false; // MapExists state reset
+
     const rootElement = this.elementRef.nativeElement;
     this.renderer.setAttribute(rootElement, 'data-dashboard-id', id);
     this.formActive = false;
     this.loading = true;
     this.id = id;
+
+    // Returns true if a map exists in the dashboard
+    this.mapStatusSubscription = this.mapStatusService.mapStatus$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((status: any) => {
+        if (status) {
+          console.log(status);
+          this.mapExists = status;
+        }
+      });
+
     return firstValueFrom(
       this.apollo.query<DashboardQueryResponse>({
         query: GET_DASHBOARD_BY_ID,
