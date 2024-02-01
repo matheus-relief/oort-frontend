@@ -212,6 +212,7 @@ export class MapComponent
     this.esriApiKey = environment.esriApiKey;
     this.mapId = uuidv4();
     this.appliedDashboardFilters = this.contextService.filter.getValue();
+    this.mapStatusService.updateMapStatus(true);
   }
 
   /** Once template is ready, build the map. */
@@ -235,10 +236,6 @@ export class MapComponent
       });
       //}
     }, 1000);
-    // When map is loaded, set mapExists status to true.
-    this.map.whenReady(async () => {
-      this.mapStatusService.updateMapStatus(true);
-    });
 
     /**
      * Keep checking until filters are applied in order to apply next one
@@ -310,7 +307,10 @@ export class MapComponent
               this.map.removeLayer(this.basemap);
               this.map.removeLayer(this.arcGisWebMap);
               this.basemap = originalBasemap.addTo(this.map); // Add the basemap back first
-              this.arcGisWebMap = originalWebMap.addTo(this.map); // Then add the webmap on top
+
+              if (originalWebMap) {
+                this.arcGisWebMap = originalWebMap.addTo(this.map); // Then add the webmap on top
+              }
               // Unsubscribe to clean up
               this.revertMapSubscription?.unsubscribe();
               // Reset the map ready status to false
